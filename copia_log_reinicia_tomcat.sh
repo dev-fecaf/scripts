@@ -29,7 +29,7 @@ fi
 
 # Reinicia o serviço do Tomcat
 echo "Reiniciando o serviço Tomcat..."
-systemctl restart tomcat && sleep 20 && chmod -R 775 /edusoft/tomcat/logs/* && top -c
+systemctl restart tomcat && sleep 20 && chmod -R 775 /edusoft/tomcat/logs/*
 if [ $? -eq 0 ]; then
     echo "Tomcat reiniciado com sucesso."
 else
