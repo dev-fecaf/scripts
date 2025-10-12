@@ -14,6 +14,8 @@ fi
 #   sudo ./create_user_with_ssh.sh victor.silva --sudo --out /root/victor_id_ed25519
 #   curl -fsSL https://raw.githubusercontent.com/dev-fecaf/scripts/refs/heads/main/create_user_with_ssh.sh | sudo bash -s -- victor.silva --sudo --out /root/victor_silva_id_ed25519
 
+# sudo deluser --remove-home nome_do_usuario
+
 # --------- Configurações ---------
 TIPO_CHAVE="ed25519"             # Tipo de chave (segura e moderna)
 NOME_ARQUIVO_CHAVE="id_${TIPO_CHAVE}"
