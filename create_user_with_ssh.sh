@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Verificação de segurança básica:
+if [[ "$(id -u)" -ne 0 ]]; then
+  echo "Este script deve ser executado como root (use sudo)." >&2
+  exit 1
+fi
+
 # create_user_with_ssh.sh
 # Uso:
 #   sudo ./create_user_with_ssh.sh <usuario> [--sudo] [--out /caminho/para/salvar_chave_privada]
