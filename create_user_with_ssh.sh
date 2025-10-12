@@ -2,197 +2,189 @@
 set -euo pipefail
 
 # create_user_with_ssh.sh
-# Usage:
-#   sudo ./create_user_with_ssh.sh <username> [--sudo] [--out /path/to/save_private_key]
-# Examples:
-#   sudo ./create_user_with_ssh.sh victor.silva
-#   sudo ./create_user_with_ssh.sh victor.silva --sudo --out /root/victor_id
+# Uso:
+#   sudo ./create_user_with_ssh.sh <usuario> [--sudo] [--out /caminho/para/salvar_chave_privada]
+# Exemplo:
+#   sudo ./create_user_with_ssh.sh victor.silva --sudo --out /root/victor_id_ed25519
 
-# --------- Configuration ---------
-KEY_TYPE="ed25519"            # strong, short keys
-KEY_FILENAME="id_${KEY_TYPE}" # name inside ~/.ssh/
-DEFAULT_SHELL="/bin/bash"
+# --------- Configurações ---------
+TIPO_CHAVE="ed25519"             # Tipo de chave (segura e moderna)
+NOME_ARQUIVO_CHAVE="id_${TIPO_CHAVE}"
+SHELL_PADRAO="/bin/bash"
 # ---------------------------------
 
-usage() {
+mostrar_ajuda() {
   cat <<EOF
-Usage: sudo $0 <username> [--sudo] [--out /path/to/save_private_key] [--force]
-Creates a user, generates SSH keypair, configures authorized_keys and returns the private key.
-Options:
-  --sudo      Add the user to 'sudo' group
-  --out FILE  Save private key to FILE (will be chmod 600). If not provided, private key is printed to stdout.
-  --force     If user exists, overwrite SSH keys and authorized_keys (use with care).
+Uso: sudo $0 <usuario> [--sudo] [--out /caminho/para/salvar_chave_privada] [--force]
+Cria um usuário, gera um par de chaves SSH, configura authorized_keys e retorna a chave privada.
+Opções:
+  --sudo       Adiciona o usuário ao grupo 'sudo'
+  --out ARQ    Salva a chave privada no arquivo ARQ (com permissão 600). Se não for informado, a chave será exibida na tela.
+  --force      Caso o usuário já exista, sobrescreve as chaves SSH existentes (use com cuidado).
 EOF
   exit 1
 }
 
+# Verifica se está rodando como root
 if [[ "$(id -u)" -ne 0 ]]; then
-  echo "This script must be run as root (sudo)." >&2
+  echo "❌ Este script precisa ser executado como root (use sudo)." >&2
   exit 2
 fi
 
 if [[ $# -lt 1 ]]; then
-  usage
+  mostrar_ajuda
 fi
 
-USERNAME=""
-OUTFILE=""
-ADD_SUDO=false
-FORCE=false
+USUARIO=""
+ARQUIVO_SAIDA=""
+ADICIONAR_SUDO=false
+FORCAR=false
 
-# simple args parsing
-POSITIONAL=()
+# Leitura dos parâmetros
+ARG_POSICIONAIS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --sudo) ADD_SUDO=true; shift ;;
-    --out) OUTFILE="$2"; shift 2 ;;
-    --force) FORCE=true; shift ;;
-    -h|--help) usage ;;
+    --sudo) ADICIONAR_SUDO=true; shift ;;
+    --out) ARQUIVO_SAIDA="$2"; shift 2 ;;
+    --force) FORCAR=true; shift ;;
+    -h|--help) mostrar_ajuda ;;
     --) shift; break ;;
     -*)
-      echo "Unknown option: $1" >&2
-      usage
+      echo "Opção desconhecida: $1" >&2
+      mostrar_ajuda
       ;;
     *)
-      POSITIONAL+=("$1"); shift
+      ARG_POSICIONAIS+=("$1"); shift
       ;;
   esac
 done
 
-if [[ ${#POSITIONAL[@]} -lt 1 ]]; then
-  usage
+if [[ ${#ARG_POSICIONAIS[@]} -lt 1 ]]; then
+  mostrar_ajuda
 fi
 
-USERNAME="${POSITIONAL[0]}"
+USUARIO="${ARG_POSICIONAIS[0]}"
 
-# Validate username (allow letters, digits, dot, underscore, dash)
-if ! [[ "$USERNAME" =~ ^[a-z_][a-z0-9_.-]{0,31}$ ]]; then
-  echo "Invalid username: '$USERNAME'. Use lowercase, start with letter/underscore, only [a-z0-9_.-], max length 32." >&2
+# Valida o nome do usuário
+if ! [[ "$USUARIO" =~ ^[a-z_][a-z0-9_.-]{0,31}$ ]]; then
+  echo "❌ Nome de usuário inválido: '$USUARIO'. Use apenas letras minúsculas, números, pontos, traços e underscores (máx. 32 caracteres)." >&2
   exit 3
 fi
 
-HOME_DIR="/home/${USERNAME}"
-SSH_DIR="${HOME_DIR}/.ssh"
-KEY_PATH="${SSH_DIR}/${KEY_FILENAME}"
-PRIV_KEY_PATH="${KEY_PATH}"
-PUB_KEY_PATH="${KEY_PATH}.pub"
-AUTHORIZED_KEYS="${SSH_DIR}/authorized_keys"
+DIR_HOME="/home/${USUARIO}"
+DIR_SSH="${DIR_HOME}/.ssh"
+CAMINHO_CHAVE="${DIR_SSH}/${NOME_ARQUIVO_CHAVE}"
+CHAVE_PRIVADA="${CAMINHO_CHAVE}"
+CHAVE_PUBLICA="${CAMINHO_CHAVE}.pub"
+AUTHORIZED_KEYS="${DIR_SSH}/authorized_keys"
 
-# If user exists
-if id "$USERNAME" &>/dev/null; then
-  if [ "$FORCE" = true ]; then
-    echo "User $USERNAME already exists and --force provided: will keep user and overwrite keys."
+# Verifica se o usuário já existe
+if id "$USUARIO" &>/dev/null; then
+  if [ "$FORCAR" = true ]; then
+    echo "⚠️  Usuário $USUARIO já existe e a opção --force foi informada. As chaves existentes serão substituídas."
   else
-    echo "User $USERNAME already exists. Use --force to overwrite keys or choose another name." >&2
+    echo "❌ Usuário $USUARIO já existe. Use --force para sobrescrever as chaves ou escolha outro nome." >&2
     exit 4
   fi
 else
-  # create user with home dir and shell
-  useradd -m -s "${DEFAULT_SHELL}" "$USERNAME"
-  echo "Created user: $USERNAME (home: ${HOME_DIR})"
+  # Cria o usuário com diretório home e shell padrão
+  useradd -m -s "${SHELL_PADRAO}" "$USUARIO"
+  echo "✅ Usuário criado: $USUARIO (home: ${DIR_HOME})"
 fi
 
-# ensure home exists (in rare cases useradd exists but no home)
-if [ ! -d "$HOME_DIR" ]; then
-  mkdir -p "$HOME_DIR"
-  chown "$USERNAME":"$USERNAME" "$HOME_DIR"
-  chmod 755 "$HOME_DIR"
+# Garante que o diretório home exista
+if [ ! -d "$DIR_HOME" ]; then
+  mkdir -p "$DIR_HOME"
+  chown "$USUARIO":"$USUARIO" "$DIR_HOME"
+  chmod 755 "$DIR_HOME"
 fi
 
-# create .ssh dir
-mkdir -p "$SSH_DIR"
-chown "$USERNAME":"$USERNAME" "$SSH_DIR"
-chmod 700 "$SSH_DIR"
+# Cria o diretório .ssh
+mkdir -p "$DIR_SSH"
+chown "$USUARIO":"$USUARIO" "$DIR_SSH"
+chmod 700 "$DIR_SSH"
 
-# Backup existing keys if present and not forced
-if [ -f "$PRIV_KEY_PATH" ] || [ -f "$PUB_KEY_PATH" ]; then
-  if [ "$FORCE" = true ]; then
+# Faz backup de chaves antigas, se existirem
+if [ -f "$CHAVE_PRIVADA" ] || [ -f "$CHAVE_PUBLICA" ]; then
+  if [ "$FORCAR" = true ]; then
     ts=$(date +%s)
-    echo "Backing up existing keys to ${PRIV_KEY_PATH}.bak.${ts}"
-    [ -f "$PRIV_KEY_PATH" ] && mv -f "$PRIV_KEY_PATH" "${PRIV_KEY_PATH}.bak.${ts}"
-    [ -f "$PUB_KEY_PATH" ]  && mv -f "$PUB_KEY_PATH"  "${PUB_KEY_PATH}.bak.${ts}"
+    echo "🔁 Fazendo backup das chaves antigas em ${CHAVE_PRIVADA}.bak.${ts}"
+    [ -f "$CHAVE_PRIVADA" ] && mv -f "$CHAVE_PRIVADA" "${CHAVE_PRIVADA}.bak.${ts}"
+    [ -f "$CHAVE_PUBLICA" ] && mv -f "$CHAVE_PUBLICA" "${CHAVE_PUBLICA}.bak.${ts}"
   else
-    echo "SSH key already exists at ${PRIV_KEY_PATH}. Use --force to overwrite." >&2
+    echo "❌ Já existem chaves SSH em ${CHAVE_PRIVADA}. Use --force para sobrescrever." >&2
     exit 5
   fi
 fi
 
-# Generate keypair as the target user (safer ownership)
-# Use -q for quiet (but we still report)
-sudo -u "$USERNAME" ssh-keygen -t "$KEY_TYPE" -f "$KEY_FILENAME" -N "" -C "${USERNAME}@$(hostname)-$(date +%F)" -q 2>/dev/null || {
-  # ssh-keygen writes to current directory for relative filename, so run it in SSH_DIR
-  sudo -u "$USERNAME" bash -c "cd \"$SSH_DIR\" && ssh-keygen -t \"$KEY_TYPE\" -f \"$KEY_FILENAME\" -N \"\" -C \"${USERNAME}@$(hostname)-$(date +%F)\" -q"
-}
+# Gera o par de chaves SSH
+sudo -u "$USUARIO" bash -c "cd \"$DIR_SSH\" && ssh-keygen -t \"$TIPO_CHAVE\" -f \"$NOME_ARQUIVO_CHAVE\" -N \"\" -C \"${USUARIO}@$(hostname)-$(date +%F)\" -q"
 
-# After generation, ensure ownership and perms
-chown "$USERNAME":"$USERNAME" "${PRIV_KEY_PATH}"
-chown "$USERNAME":"$USERNAME" "${PUB_KEY_PATH}"
-chmod 600 "${PRIV_KEY_PATH}"
-chmod 644 "${PUB_KEY_PATH}"
+# Ajusta permissões
+chown "$USUARIO":"$USUARIO" "${CHAVE_PRIVADA}" "${CHAVE_PUBLICA}"
+chmod 600 "${CHAVE_PRIVADA}"
+chmod 644 "${CHAVE_PUBLICA}"
 
-# Install public key into authorized_keys (append if not present)
+# Adiciona a chave pública ao authorized_keys
 touch "${AUTHORIZED_KEYS}"
 chmod 600 "${AUTHORIZED_KEYS}"
-chown "$USERNAME":"$USERNAME" "${AUTHORIZED_KEYS}"
+chown "$USUARIO":"$USUARIO" "${AUTHORIZED_KEYS}"
 
-# If pubkey not already in authorized_keys, append it
-if ! grep -qs -F "$(cat "${PUB_KEY_PATH}")" "${AUTHORIZED_KEYS}"; then
-  cat "${PUB_KEY_PATH}" >> "${AUTHORIZED_KEYS}"
-  echo "Installed public key to ${AUTHORIZED_KEYS}"
+if ! grep -qs -F "$(cat "${CHAVE_PUBLICA}")" "${AUTHORIZED_KEYS}"; then
+  cat "${CHAVE_PUBLICA}" >> "${AUTHORIZED_KEYS}"
+  echo "🔑 Chave pública adicionada a ${AUTHORIZED_KEYS}"
 else
-  echo "Public key already present in ${AUTHORIZED_KEYS}"
+  echo "ℹ️  Chave pública já estava presente em ${AUTHORIZED_KEYS}"
 fi
 
-# Optionally add to sudo group
-if [ "$ADD_SUDO" = true ]; then
-  usermod -aG sudo "$USERNAME"
-  echo "Added $USERNAME to group sudo"
+# Adiciona ao grupo sudo, se solicitado
+if [ "$ADICIONAR_SUDO" = true ]; then
+  usermod -aG sudo "$USUARIO"
+  echo "👑 Usuário $USUARIO adicionado ao grupo sudo"
 fi
 
-# Prepare private key output
-PRIVATE_KEY_CONTENT="$(cat "${PRIV_KEY_PATH}")"
+# Exibe ou salva a chave privada
+CONTEUDO_CHAVE="$(cat "${CHAVE_PRIVADA}")"
 
-if [[ -n "$OUTFILE" ]]; then
-  # Write private key to OUTFILE with secure perms
+if [[ -n "$ARQUIVO_SAIDA" ]]; then
   umask 077
-  echo "$PRIVATE_KEY_CONTENT" > "$OUTFILE"
-  chmod 600 "$OUTFILE"
-  echo "Private key written to: $OUTFILE (chmod 600)."
-  echo "Ensure you move it off the server to a safe location and delete when no longer needed."
+  echo "$CONTEUDO_CHAVE" > "$ARQUIVO_SAIDA"
+  chmod 600 "$ARQUIVO_SAIDA"
+  echo "💾 Chave privada salva em: $ARQUIVO_SAIDA (permissão 600)"
+  echo "⚠️  Guarde essa chave em local seguro e remova qualquer cópia desnecessária."
 else
-  # Print to stdout with clear markers so caller can capture it
   cat <<'EOF'
 
-===== BEGIN PRIVATE KEY (copy everything between the markers) =====
+===== INÍCIO DA CHAVE PRIVADA (copie tudo entre as linhas) =====
 EOF
-  printf '%s\n' "$PRIVATE_KEY_CONTENT"
+  printf '%s\n' "$CONTEUDO_CHAVE"
   cat <<'EOF'
-===== END PRIVATE KEY =====
+===== FIM DA CHAVE PRIVADA =====
 
-IMPORTANT:
-- Save this private key immediately to a secure file (chmod 600).
-- Do NOT leave this visible in logs or history.
-- If you close this terminal without saving, you will not be able to retrieve the private key again from the server
-  (unless you left the private file on disk under the user's ~/.ssh, but that would be insecure).
+⚠️ IMPORTANTE:
+- Salve essa chave imediatamente em um arquivo seguro (chmod 600).
+- NÃO deixe essa chave em logs, histórico ou prints.
+- Se você fechar o terminal sem salvar, não poderá recuperá-la.
 EOF
 fi
 
-# Print a short summary
+# Resumo final
 cat <<EOF
 
-Summary:
-  user:             ${USERNAME}
-  home:             ${HOME_DIR}
-  ssh dir:          ${SSH_DIR}
-  private key file: ${PRIV_KEY_PATH}
-  public key file:  ${PUB_KEY_PATH}
-  authorized_keys:  ${AUTHORIZED_KEYS}
+📋 Resumo da operação:
+  👤 Usuário:           ${USUARIO}
+  🏠 Diretório home:    ${DIR_HOME}
+  📂 Pasta SSH:         ${DIR_SSH}
+  🔐 Chave privada:     ${CHAVE_PRIVADA}
+  🔓 Chave pública:     ${CHAVE_PUBLICA}
+  🪪 Authorized_keys:   ${AUTHORIZED_KEYS}
 
-Notes:
- - The generated key also remains in the user's ~/.ssh/ for server-side use.
- - If you used --out, that file contains the private key with chmod 600.
- - If you captured private key from stdout, move it to a secure path (chmod 600) and delete any temp copies.
+Notas:
+- A chave privada também foi mantida em ~/.ssh/ do usuário no servidor.
+- Se usou --out, a chave privada está salva nesse caminho com permissão 600.
+- Caso tenha copiado da tela, salve-a com segurança e apague qualquer cópia temporária.
 
+✅ Finalizado com sucesso.
 EOF
 
 exit 0
